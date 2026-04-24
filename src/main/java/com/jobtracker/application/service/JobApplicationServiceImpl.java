@@ -10,11 +10,16 @@ import com.jobtracker.application.entity.JobApplication;
 import com.jobtracker.application.mapper.JobApplicationMapper;
 import com.jobtracker.application.repository.JobApplicationRepository;
 import com.jobtracker.application.specification.JobApplicationSpecification;
+import com.jobtracker.application.event.JobApplicationCreatedEvent;
+import com.jobtracker.application.event.StatusChangedEvent;
+import com.jobtracker.audit.annotation.Auditable;
+import com.jobtracker.audit.entity.AuditAction;
 import com.jobtracker.common.dto.PageResponse;
 import com.jobtracker.common.exception.ResourceNotFoundException;
 import com.jobtracker.user.entity.User;
 import com.jobtracker.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -28,6 +33,7 @@ public class JobApplicationServiceImpl implements JobApplicationService {
     private final JobApplicationRepository applicationRepository;
     private final UserRepository userRepository;
     private final JobApplicationMapper applicationMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResponse<JobApplicationResponse> getAll(Long userId, JobApplicationFilter filter, Pageable pageable) {
@@ -42,6 +48,7 @@ public class JobApplicationServiceImpl implements JobApplicationService {
 
     @Override
     @Transactional
+    @Auditable(entityType = "JobApplication", action = AuditAction.CREATE)
     public JobApplicationResponse create(Long userId, CreateJobApplicationRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId));
@@ -56,27 +63,45 @@ public class JobApplicationServiceImpl implements JobApplicationService {
             application.setCurrency("TRY");
         }
 
-        return applicationMapper.toResponse(applicationRepository.save(application));
+        JobApplicationResponse response = applicationMapper.toResponse(applicationRepository.save(application));
+        eventPublisher.publishEvent(new JobApplicationCreatedEvent(
+                userId, response.getId(), response.getCompanyName(), response.getPosition()));
+        return response;
     }
 
     @Override
     @Transactional
+    @Auditable(entityType = "JobApplication", action = AuditAction.UPDATE)
     public JobApplicationResponse update(Long userId, Long id, UpdateJobApplicationRequest request) {
         JobApplication application = findOrThrow(userId, id);
+        ApplicationStatus previousStatus = application.getStatus();
         applicationMapper.updateFromRequest(request, application);
-        return applicationMapper.toResponse(applicationRepository.save(application));
+        JobApplicationResponse response = applicationMapper.toResponse(applicationRepository.save(application));
+        if (!request.getStatus().equals(previousStatus)) {
+            eventPublisher.publishEvent(new StatusChangedEvent(
+                    userId, id, previousStatus, request.getStatus(), application.getCompanyName()));
+        }
+        return response;
     }
 
     @Override
     @Transactional
+    @Auditable(entityType = "JobApplication", action = AuditAction.UPDATE)
     public JobApplicationResponse patch(Long userId, Long id, PatchJobApplicationRequest request) {
         JobApplication application = findOrThrow(userId, id);
+        ApplicationStatus previousStatus = application.getStatus();
         applicationMapper.patchFromRequest(request, application);
-        return applicationMapper.toResponse(applicationRepository.save(application));
+        JobApplicationResponse response = applicationMapper.toResponse(applicationRepository.save(application));
+        if (request.getStatus() != null && !request.getStatus().equals(previousStatus)) {
+            eventPublisher.publishEvent(new StatusChangedEvent(
+                    userId, id, previousStatus, request.getStatus(), application.getCompanyName()));
+        }
+        return response;
     }
 
     @Override
     @Transactional
+    @Auditable(entityType = "JobApplication", action = AuditAction.DELETE)
     public void delete(Long userId, Long id) {
         if (!applicationRepository.existsByIdAndUserId(id, userId)) {
             throw new ResourceNotFoundException("JobApplication", id);

@@ -3,11 +3,13 @@ package com.jobtracker.application.dto;
 import com.jobtracker.application.entity.ApplicationSource;
 import com.jobtracker.application.entity.ApplicationStatus;
 import com.jobtracker.application.entity.WorkType;
+import com.jobtracker.tag.dto.TagResponse;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -27,6 +29,7 @@ public class JobApplicationResponse {
     private String currency;
     private String notes;
     private ApplicationSource source;
+    private List<TagResponse> tags;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

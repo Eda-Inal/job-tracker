@@ -1,5 +1,6 @@
 package com.jobtracker.application.entity;
 
+import com.jobtracker.tag.entity.Tag;
 import com.jobtracker.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -10,6 +11,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "job_applications")
@@ -61,6 +64,15 @@ public class JobApplication {
 
     @Enumerated(EnumType.STRING)
     private ApplicationSource source;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "job_application_tags",
+            joinColumns = @JoinColumn(name = "job_application_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    @Builder.Default
+    private Set<Tag> tags = new HashSet<>();
 
     @Column(nullable = false)
     @Builder.Default
